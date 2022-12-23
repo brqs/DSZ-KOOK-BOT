@@ -4,6 +4,8 @@
 
 一个基于 [khl.py](https://github.com/TWT233/khl.py)的[xiaomai-bot: 战地1寄气人 (github.com)](https://github.com/g1331/xiaomai-bot)的kook移植版。
 
+加入**ddf**kook服务器查看具体功能演示邀请链接https://kook.top/HRNCP2
+
 ## 功能简览:
 
 - 目前支持的主要服务：
