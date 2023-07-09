@@ -5,7 +5,7 @@ from loguru import logger
 from sqlalchemy import select, func
 
 from utils.bf1.database.tables import orm, Bf1PlayerBind, Bf1Account, Bf1Server, Bf1Group, Bf1GroupBind, Bf1MatchCache, \
-    Bf1ServerVip, Bf1ServerBan, Bf1ServerAdmin, Bf1ServerOwner, Bf1ServerPlayerCount,Bf1ManagerLog
+    Bf1ServerVip, Bf1ServerBan, Bf1ServerAdmin, Bf1ServerOwner, Bf1ServerPlayerCount,Bf1ManagerLog,Bf1GroupAdmin
 import uuid
 
 class bf1_db:
@@ -954,7 +954,44 @@ class bf1_db:
             return False
         except Exception as e:
             logger.exception(e)
-    
+    @staticmethod
+    async def insert_or_update_bfgroup_server_admin(group_name:str,kookid: int,kooknickname:str,level:int) -> bool:
+        """"添加群组管理员或所有者"""
+        data={
+            "group_name":group_name,
+            "kookid":kookid,
+            "kooknickname":kooknickname,
+            "permission_level":level
+        }
+        await orm.add(Bf1GroupAdmin,data)
+        return True
+    @staticmethod
+    async def delete_bfgroup_server_admin(group_name:str,kookid: int,kooknickname:str,level:int) -> bool:
+        """"添加群组管理员或所有者"""
+        condition=[Bf1GroupAdmin.group_name==group_name,Bf1GroupAdmin.kookid==kookid,Bf1GroupAdmin.kooknickname==kooknickname]
+        await orm.delete(Bf1GroupAdmin,condition)
+        return True
+    @staticmethod
+    async def list_bfgroup_server_admin(group_name:str) -> list:
+        """"列出群组管理员或所有者"""
+        if adminlist := await orm.fetch_all(select(Bf1GroupAdmin.kooknickname,Bf1GroupAdmin.permission_level).where(Bf1GroupAdmin.group_name==group_name)):
+            return [i for i in adminlist]
+        else:
+            return None
+    @staticmethod
+    async def get_user_permission_level(uid:int) -> int:
+        """"获取玩家权限"""
+        if level := await orm.fetch_one(select(Bf1GroupAdmin.permission_level).where(Bf1GroupAdmin.kookid==uid)):
+            return level
+        else:
+            return [(2)]
+    @staticmethod
+    async def get_group_name_by_id(uid:int) -> list:
+        """"列出玩家权限所在群组"""
+        if g_list := await orm.fetch_all(select(Bf1GroupAdmin.group_name).where(Bf1GroupAdmin.kookid==uid)):
+            return [i[0] for i in g_list]
+        else:
+            return []
     @staticmethod
     async def insert_or_update_bfgroup_server(bf1_group_name:str,severs_name: str,server_guid:str) -> bool:
         """添加或者修改bf1群组绑定的服务器信息"""

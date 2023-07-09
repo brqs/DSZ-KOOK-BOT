@@ -37,12 +37,21 @@ class Bf1PlayerBind(orm.Base):
 # 群组信息
 class Bf1Group(orm.Base):
     """bf1群组信息"""
-
     __tablename__ = "bf1_group"
     id = Column(Integer, primary_key=True)
     group_name = Column(String, unique=True)
     bind_guids = Column(JSON)
     bind_manager_account_pids = Column(JSON)
+# 群组管理员表
+class Bf1GroupAdmin(orm.Base):
+    """bf1群组信息"""
+
+    __tablename__ = "bf1_group_admin"
+    id = Column(Integer, primary_key=True)
+    group_name = Column(String)
+    kookid=Column(Integer)
+    kooknickname=Column(String)
+    permission_level=Column(Integer)
 
 class Bf1GroupBind(orm.Base):
     """bf1群组与QQ群绑定关系表"""

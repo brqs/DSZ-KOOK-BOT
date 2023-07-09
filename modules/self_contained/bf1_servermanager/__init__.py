@@ -8,7 +8,7 @@ import asyncio
 from utils.bf1.bf_utils import (get_personas_by_name, check_bind, BTR_get_recent_info,
     BTR_get_match_info, BTR_update_data, bfeac_checkBan, bfban_checkBan, gt_checkVban, gt_bf1_stat, record_api
 )
-from utils.kook.kook_utils import msg_log
+from utils.kook.kook_utils import msg_log,permission_required
 from typing import Union, List, Tuple, Dict, Any
 import time
 import datetime
@@ -22,8 +22,11 @@ import random
 import httpx
 import json
 import aiohttp
+import re
+from functools import wraps
 @bot.command(name="create_group", aliases=["group"],prefixes=["-"])
 @msg_log()
+@permission_required(10) 
 async def bfgroup_create( msg:PublicMessage,group_name: str=None):
     if group_name is None:
         await msg.reply(
@@ -37,6 +40,7 @@ async def bfgroup_create( msg:PublicMessage,group_name: str=None):
             await msg.reply(f"群组{group_name}已存在，请勿重复创建")
 @bot.command(name="add_group_server_info", aliases=["addserver","as"],prefixes=["-"])
 @msg_log()
+@permission_required(10) 
 async def add_bfgroup_server( msg:PublicMessage,group_name: str,server_name: str,server_guid:str):
     if group_name is None or server_name is None or server_guid is None:
         await msg.reply(
@@ -54,6 +58,7 @@ async def add_bfgroup_server( msg:PublicMessage,group_name: str,server_name: str
             )
 @bot.command(name="remove_group_server_info", aliases=["removeserver","rs"],prefixes=["-"])
 @msg_log()
+@permission_required(10) 
 async def remove_bfgroup_server( msg:PublicMessage,group_name: str,server_name: str):
     if group_name is None or server_name is None :
         await msg.reply(
@@ -118,6 +123,7 @@ async def list_bfgroup_server( msg:PublicMessage,group_name: str="ddf"):
 #kick ban unban 三件套
 @bot.command(name='kick',aliases=['踢','k'],prefixes=['/','\\','-','、','.','。'])
 @msg_log()
+@permission_required(4) 
 async def kick(msg: PublicMessage,server_rank: str, player_name: str, reason: str='kick by dsz ,join kook appeal'):       
 # 字数检测
     if len(reason.encode("utf-8"))>30:
@@ -157,9 +163,53 @@ async def kick(msg: PublicMessage,server_rank: str, player_name: str, reason: st
     else:
         await msg.reply(f"收到指令:/kick {server_rank} {player_name} {reason}\n但执行出错了")
         return False
+@bot.command(name='fkick',aliases=['放逐'],prefixes=['/','\\','-','、','.','。'])
+@msg_log()
+@permission_required(1) 
+async def fkick_no_need_rank(msg: PublicMessage, player_name: str, reason: str='kick by dsz ,join kook appeal'):
+    # 字数检测
+    if 30 < len(reason.encode("utf-8")):
+        await msg.reply("原因字数过长(汉字10个以内)")
+        return False
+    try:
+        player_info = await get_personas_by_name(player_name)
+        if isinstance(player_info, str):
+            return await  msg.reply("查询出错!{player_info}")
+    except:
+        await msg.reply("网络出错，请稍后再试")
+        return False
+    try:
+        if player_info['personas'] == {}:
+            await msg.reply("玩家[{player_name}]不存在")
+            return False
+        player_pid = player_info['personas']['persona'][0]['personaId']
+        server_info = await (await BF1DA.get_api_instance()).getServersByPersonaIds(player_pid)
+        server_info=server_info["result"][f'{player_pid}']
+        if server_info is None:
+            await msg.reply(f"{server_info},如果该玩家在线,请指定服务器序号")
+            return False
+        else:
+            server_gid = server_info["gameId"]
+            server_guid=server_info["guid"]
+            server_sid=""
+        logger.info(server_gid)
+        result =  await (await BF1DA.get_api_instance()).kickPlayer(server_gid,player_pid, reason)
+        if type(result) == str:
+            await msg.reply(f"{result}")
+            return False
+        elif type(result) == dict:
+            await msg.reply(f"{player_name}不再被需要了，已经被踢出。")
+            await BF1DB.add_rsp_log(msg.author_id,msg.author.nickname,server_sid,server_guid,server_gid,player_pid,player_name,"kick",msg.content.strip().replace('\n', '\\n'),datetime.datetime.now())
+            return True
+        else:
+            await msg.reply(f"收到指令但执行出错了")
+            return False  
+    except Exception as e:
+        logger.exception(e)                 
 # 不用指定服务器序号
 @bot.command(name='kick_no_need_rank',aliases=['踹','nk'],prefixes=['/','\\','-','、','.','。'])
 @msg_log()
+@permission_required(4) 
 async def kick_no_need_rank(msg: PublicMessage, player_name: str, reason: str='kick by dsz ,join kook appeal'):
     # 字数检测
     if 30 < len(reason.encode("utf-8")):
@@ -202,6 +252,7 @@ async def kick_no_need_rank(msg: PublicMessage, player_name: str, reason: str='k
         logger.exception(e)                 
 @bot.command(name='add_ban',aliases=['ban'],prefixes=['/','\\','-','、','.','。'])
 @msg_log()
+@permission_required(4) 
 async def add_ban(msg: PublicMessage,server_rank: str, player_name: str, reason: str='ban by dsz ,join kook appeal'):
     # 字数检测
     if 45 < len(reason.encode("utf-8")):
@@ -245,6 +296,7 @@ async def add_ban(msg: PublicMessage,server_rank: str, player_name: str, reason:
 # 解封
 @bot.command(name='del_ban',aliases=['unban'],prefixes=['/','\\','-','、','.','。'])
 @msg_log()
+@permission_required(4) 
 async def del_ban(msg: PublicMessage,server_rank: str, player_name: str):
     # 获取服务器id信息
     server =await BF1DB.get_bfgroup_server_info_by_server_server_name(server_rank)
@@ -284,6 +336,7 @@ async def del_ban(msg: PublicMessage,server_rank: str, player_name: str):
 # banall
 @bot.command(name='add_banall',aliases=['banall', 'bana'],prefixes=['/','\\','-','、','.','。'])
 @msg_log()
+@permission_required(4) 
 async def add_banall(msg: PublicMessage,player_name: str, group_name:str="ddf",reason: str="banall by dsz"):
     # TODO 循环 -> task = ban(id) ->并发 -> 循环 result -> 输出
     # 查验玩家存不存在
@@ -346,6 +399,7 @@ async def add_banall(msg: PublicMessage,player_name: str, group_name:str="ddf",r
         logger.exception(e)
 @bot.command(name='del_banall',aliases=['unbanall', 'unbana'],prefixes=['/','\\','-','、','.','。'])
 @msg_log()
+@permission_required(4) 
 async def del_banall(msg: PublicMessage,player_name: str, group_name:str="ddf",reason: str="banall by dsz"):
     # TODO 循环 -> task = ban(id) ->并发 -> 循环 result -> 输出
     # 查验玩家存不存在
@@ -408,6 +462,7 @@ async def del_banall(msg: PublicMessage,player_name: str, group_name:str="ddf",r
         logger.exception(e)
 @bot.command(name='move_player',aliases=['move', '换边','挪'],prefixes=['/','\\','-','、','.','。'])
 @msg_log()
+@permission_required(4) 
 async def move_player(msg: PublicMessage,server_rank: str, player_name: str, team_index: str):
     # 队伍序号检测
     try:
@@ -461,6 +516,7 @@ async def move_player(msg: PublicMessage,server_rank: str, player_name: str, tea
         return False
 @bot.command(name='change_map',aliases=['map', '换图'],prefixes=['/','\\','-','、','.','。'])
 @msg_log()
+@permission_required(4) 
 async def change_map(msg:PublicMessage,server_rank: str, map_index: str):
     # 获取服务器id信息
     server =await BF1DB.get_bfgroup_server_info_by_server_server_name(server_rank)
@@ -1323,7 +1379,9 @@ async def get_server_playerList_pic(msg:PublicMessage, server_rank: str="ddf1"):
         await msg.reply(img_url,type=MessageTypes.IMG)
     except Exception as e:
         logger.exception(e)
+
 @bot.command(name="bf1log",aliases=["bf1log","blog"],prefixes=['/','\\','-','、','.','。'])
+@permission_required(1) 
 async def bf1log(msg:PublicMessage,player_name:str):
     bf1_log=await BF1DB.get_bf1log_by_player_name(player_name)
     if bf1_log is None:
@@ -1334,4 +1392,68 @@ async def bf1log(msg:PublicMessage,player_name:str):
             output+=f'{player_name}于{i[3]}被{i[0]}{i[1]}具体记录为{i[4]}\n'
         output+="="*18
         await msg.reply(output)
-        
+  
+@bot.command(name="add_group_admin",aliases=["agd","ad"],prefixes=['/','\\','-','、','.','。'])
+@permission_required(8) 
+async def add_group_admin(msg:PublicMessage,group_name:str,kook:str):
+    try:   
+        uid=int(re.sub(r"\(met\)(\d+)\(met\)", r"\1", kook))
+        user=await bot.client.fetch_user(uid)
+        nick=user.nickname
+        await BF1DB.insert_or_update_bfgroup_server_admin(group_name,uid,nick,4)
+        await msg.reply("添加管理员成功")
+    except Exception as e:
+        logger.exception(e)
+  
+@bot.command(name="add_group_owner",aliases=["ago","ao"],prefixes=['/','\\','-','、','.','。'])
+@permission_required(16) 
+async def add_group_owner(msg:PublicMessage,group_name:str,kook:str):
+    try:   
+        uid=int(re.sub(r"\(met\)(\d+)\(met\)", r"\1", kook))
+        user=await bot.client.fetch_user(uid)
+        nick=user.nickname
+        await BF1DB.insert_or_update_bfgroup_server_admin(group_name,uid,nick,8)
+        await msg.reply("添加所有者成功")
+    except Exception as e:
+        logger.exception(e)
+ 
+@bot.command(name="del_group_admin",aliases=["dga","da"],prefixes=['/','\\','-','、','.','。'])
+@permission_required(8)  
+async def del_group_admin(msg:PublicMessage,group_name:str,kook:str):
+    try:   
+        uid=int(re.sub(r"\(met\)(\d+)\(met\)", r"\1", kook))
+        user=await bot.client.fetch_user(uid)
+        nick=user.nickname
+        await BF1DB.delete_bfgroup_server_admin(group_name,uid,nick,4)
+        await msg.reply("移除管理员成功")
+    except Exception as e:
+        logger.exception(e)
+       
+@bot.command(name="del_group_owner",aliases=["dgo","do"],prefixes=['/','\\','-','、','.','。'])
+@permission_required(8) 
+async def del_group_owner(msg:PublicMessage,group_name:str,kook:str):
+    try:   
+        uid=int(re.sub(r"\(met\)(\d+)\(met\)", r"\1", kook))
+        user=await bot.client.fetch_user(uid)
+        nick=user.nickname
+        await BF1DB.delete_bfgroup_server_admin(group_name,uid,nick,8)
+        await msg.reply("移除所有者成功")
+    except Exception as e:
+        logger.exception(e)
+
+@bot.command(name="list_group_admin",aliases=["lga","la"],prefixes=['/','\\','-','、','.','。'])
+@permission_required(1)
+async def list_group_admin(msg:PublicMessage,group_name:str):
+    try:   
+        admin_list=await BF1DB.list_bfgroup_server_admin(group_name)
+        if admin_list is None:
+            await msg.reply("该群组不存在")
+        logger.info(admin_list)
+        output=f"{group_name}共有{len(admin_list)}位管理，列出如下\n"
+        output+="="*16+"\n"
+        for i in admin_list:
+            output +=f"{i[0]}{'(所有者)'if i[1]==8 else ''}\n"
+        output+="="*16
+        await msg.reply(output)
+    except Exception as e:
+        logger.exception(e)
