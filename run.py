@@ -1,4 +1,4 @@
-from modules.self_contained.kook_log import  bot
+from modules.self_contained.bf1_servermanager import  bot
 
 
 if __name__ == "__main__":

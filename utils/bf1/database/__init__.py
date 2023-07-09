@@ -5,7 +5,7 @@ from loguru import logger
 from sqlalchemy import select, func
 
 from utils.bf1.database.tables import orm, Bf1PlayerBind, Bf1Account, Bf1Server, Bf1Group, Bf1GroupBind, Bf1MatchCache, \
-    Bf1ServerVip, Bf1ServerBan, Bf1ServerAdmin, Bf1ServerOwner, Bf1ServerPlayerCount
+    Bf1ServerVip, Bf1ServerBan, Bf1ServerAdmin, Bf1ServerOwner, Bf1ServerPlayerCount,Bf1ManagerLog
 import uuid
 
 class bf1_db:
@@ -910,7 +910,7 @@ class bf1_db:
     #   根据kook来获取对应绑定的群组
     #   根据对应guid获取服务器信息
     #   写:
-    #   绑定kook群和群组名
+    #   创建群组名和服务器信息
 
     @staticmethod
     async def get_bf1_group_by_kook(kook_group_id: int) -> Bf1Group:
@@ -936,27 +936,169 @@ class bf1_db:
         return None
 
     @staticmethod
-    async def bind_kook_group_to_bf1_group(kook_group_id: int, bf1_group_name: str) -> bool:
-        """绑定kook群和bf1群组"""
-        bf1_group = await orm.fetch_one(
-            select(Bf1Group).where(Bf1Group.group_name == bf1_group_name)
-        )
-        if not bf1_group:
+    async def create_kook_group_to_bf1_group(bf1_group_name: str) -> bool:
+        """创建bf1群组"""
+        try:
+            bf1_group = await orm.fetch_one(
+                select(Bf1Group).where(Bf1Group.group_name == bf1_group_name)
+            )
+            if bf1_group is None:
+                data={
+                    "group_name":bf1_group_name
+                }
+                await orm.add(Bf1Group,data)
+                return True
+            else:
+                logger.warning("group_name already exists")
+            
             return False
-        else:
-            bf1_group = bf1_group[0]
-        await orm.insert_or_update(
-            table=Bf1GroupBind,
-            data={
-                "kook_group_id": kook_group_id,
-                "bf1_group_id": bf1_group.id
-            },
-            condition=[
-                Bf1PlayerBind.kook == kook_group_id
-            ]
-        )
+        except Exception as e:
+            logger.exception(e)
+    
+    @staticmethod
+    async def insert_or_update_bfgroup_server(bf1_group_name:str,severs_name: str,server_guid:str) -> bool:
+        """添加或者修改bf1群组绑定的服务器信息"""
+        try:
+            bfgroup = await orm.fetch_one(select(Bf1Group.bind_guids).where(Bf1Group.group_name == bf1_group_name))
+            logger.debug(bfgroup)
+            if bfgroup[0] is not None:
+                bfgroup[0][severs_name]=server_guid
+                data={
+                    "group_name":bf1_group_name,
+                    "bind_guids":bfgroup[0],
+                }
+                condition=[
+                Bf1Group.group_name == bf1_group_name,
+                ]
+                await orm.insert_or_update(Bf1Group, data,condition)
+            else:
+                data={
+                    "group_name":bf1_group_name,
+                    "bind_guids":{severs_name:server_guid},
+                }
+                condition=[
+                Bf1Group.group_name == bf1_group_name,
+                ]
+                await orm.insert_or_update(Bf1Group, data,condition)        
+        except Exception as e:
+            logger.exception(e)
+            return False
         return True
-
+    @staticmethod
+    async def remove_bfgroup_server(bf1_group_name:str,severs_name: str) -> bool:
+        try:
+            bfgroup = await orm.fetch_one(select(Bf1Group.bind_guids).where(Bf1Group.group_name == bf1_group_name)) 
+            if bfgroup[0] is not None:
+                if severs_name in bfgroup[0]:
+                    bfgroup[0].pop(severs_name, None)
+                else: 
+                    logger.warning("删除的服务器不在该群组中")
+                    return False
+            else:
+                logger.warning("删除的服务器群组为空")
+                return False
+            data={
+                    "group_name":bf1_group_name,
+                    "bind_guids":bfgroup[0],
+                }
+            condition=[
+                Bf1Group.group_name == bf1_group_name,
+            ]
+            await orm.insert_or_update(Bf1Group, data,condition)
+        except Exception as e:
+            logger.exception(e)
+        return True
+    @staticmethod
+    async def list_bfgroup_server(bf1_group_name:str) -> list:
+        """列出bf1群组绑定的服务器信息"""
+        try:
+            bfgroup = await orm.fetch_one(select(Bf1Group.bind_guids).where(Bf1Group.group_name == bf1_group_name))
+            logger.debug(bfgroup)
+            if bfgroup is None:
+                return  False
+            if bfgroup[0] is not None:
+                output=[]
+                for k,v in bfgroup[0].items():
+                    server = await orm.fetch_one(
+                    select(Bf1Server.serverName,Bf1Server.serverId,Bf1Server.gameId).where(Bf1Server.persistedGameId == v)
+                    )
+                    output.append([server[0],server[1],server[2],v])
+                
+                return output
+            else:
+                logger.warning("群组服务器为空")
+                return False    
+        except Exception as e:
+            logger.exception(e)
+            return False
+        
+    @staticmethod
+    async def get_bfgroup_server_info_by_server_server_name(server_name:str) -> list:
+        """查找bf1群组绑定的服务器信息"""
+        try:
+            bfgroup = await orm.fetch_one(select(Bf1Group.bind_guids).where(Bf1Group.group_name == server_name[0:-1]))
+            logger.debug(bfgroup)
+            if bfgroup is None:
+                logger.info(f"{server_name[0:-2]}不存在")
+                return  False
+            if bfgroup[0] is not None:
+                if server_name not in bfgroup[0]:
+                    return False
+                output=[]
+                guid=bfgroup[0][server_name]
+                server = await orm.fetch_one(
+                select(Bf1Server.serverId,Bf1Server.gameId).where(Bf1Server.persistedGameId == guid)
+                )
+                output.append([server[0],server[1],guid])
+                return output
+            else:
+                logger.warning(f"{server_name[0:-2]}群组服务器为空")
+                return False    
+        except Exception as e:
+            logger.exception(e)
+            return False
+        
+    @staticmethod
+    async def add_rsp_log(author_id:str,nickname:str,server_id:str,server_guid:str,server_gameid:str,player_pid:str,player_name:str,type:str,content:str,time:str) -> bool:
+        """用于添加服管日志记录
+        Args:
+            author_id (str): 操作者kookid
+            nickname (str): 操作者昵称
+            server_id (str): 服务器id
+            server_guid (str): 服务器guid
+            server_gameid (str): 服务器gameid
+            player_pid (str): 被操作玩家id
+            type (str): 操作类型
+            content (str): 完整日志
+            time (str): 操作时间
+        Returns:
+            bool: 是否记录成功
+        """
+        try:
+            data={
+                "kookid":author_id,
+                "kooknickname":nickname,
+                "serverId":server_id,
+                "persistedGameId":server_guid,
+                "gameId":server_gameid,
+                "persona_id":player_pid,
+                "display_name":player_name,
+                "log_type":type,
+                "log_content":content,
+                "log_time":time,
+            }
+            await orm.add(Bf1ManagerLog, data)
+        except  Exception   as e:
+            logger.exception(e)
+        return True
+    
+    @staticmethod
+    async def get_group_bindList() -> list:
+        bfgroupac = await orm.fetch_all(select(Bf1Account.display_name))
+        output=[]
+        for i in bfgroupac:
+            output.append(i[0].upper())
+        return output
     # TODO
     #   btr对局缓存
     #   读:
@@ -1027,6 +1169,11 @@ class bf1_db:
                 Bf1MatchCache.display_name == display_name
             ]
         )
-
+    @staticmethod
+    async def get_bf1log_by_player_name(player_name:str)-> list:
+        if log := await orm.fetch_all(select(Bf1ManagerLog.kooknickname,Bf1ManagerLog.display_name,Bf1ManagerLog.log_type,Bf1ManagerLog.log_time,Bf1ManagerLog.log_content).where(Bf1ManagerLog.display_name==player_name)):
+            return [i for i in log]
+        else:
+            return None
 
 BF1DB = bf1_db()

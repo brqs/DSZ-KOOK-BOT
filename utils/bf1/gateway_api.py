@@ -1335,7 +1335,24 @@ class RSP(bf1_api):
                 "id": await get_a_uuid()
             }
         )
-
+        
+    async def movePlayer(self, server_gameid: Union[int, str], player_pid: Union[int, str],index:int) -> dict:
+        return await self.api_call(
+                {
+                    "jsonrpc": "2.0",
+                    "method": "RSP.movePlayer",
+                    "params": {
+                        "game": "tunguska",
+                        "gameId": "%s" % server_gameid,
+                        # 玩家所在的队伍id!!!
+                        "teamId": index,
+                        "personaId": player_pid,
+                        "forceKill": True,
+                        "moveParty": False
+                    },
+                    "id": await get_a_uuid()
+                }
+            )    
     async def addServerBan(self, personaId: Union[int, str], serverId: Union[int, str]) -> dict:
         """
         上Ban

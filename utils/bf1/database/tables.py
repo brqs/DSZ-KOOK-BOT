@@ -44,7 +44,6 @@ class Bf1Group(orm.Base):
     bind_guids = Column(JSON)
     bind_manager_account_pids = Column(JSON)
 
-
 class Bf1GroupBind(orm.Base):
     """bf1群组与QQ群绑定关系表"""
     __tablename__ = "bf1_group_bind"
@@ -145,6 +144,8 @@ class Bf1ManagerLog(orm.Base):
 
     __tablename__ = "bf1_manager_log"
     id = Column(Integer, primary_key=True)
+    kookid=Column(Integer)
+    kooknickname= Column(String)
     serverId = Column(BIGINT)
     persistedGameId = Column(String)
     gameId = Column(BIGINT, nullable=False)
@@ -153,8 +154,9 @@ class Bf1ManagerLog(orm.Base):
     # 变化
     display_name = Column(String)
     # action
-    action = Column(String, )
-    time = Column(DateTime)
+    log_type = Column(String, )
+    log_content=Column(String, )
+    log_time = Column(DateTime)
 
 
 # 对局缓存
@@ -188,3 +190,4 @@ class Bf1MatchCache(orm.Base):
     accuracy = Column(String, nullable=False)
     headshots = Column(String, nullable=False)
     time_played = Column(Integer, nullable=False)
+
